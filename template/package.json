@@ -1,0 +1,35 @@
+{
+	"name": "server",
+	"version": "0.0.0",
+	"private": true,
+	"dependencies": {
+		"smi.cli": "0.x",
+	    "express": "^4.7.2",
+	    "send": "^0.7.3",
+	    "ws": "~0.7.1",
+	    "morgan": "~1.5.1"
+	},
+	"directories": {
+		"deploy": "www/bundles"
+	},
+    "upstream": {
+	    "packages": {
+			"top": [
+                "../../../../../_upstream/os-inception/*",
+				"/opt/services/*"
+			]
+	    }
+    },
+    "mappings": {
+        "pinf-for-nodejs": "top/pinf-for-nodejs"
+    },
+    "scripts": {
+	    "install": "./node_modules/.bin/smi install"
+    },
+    "config": {
+    	"smi.cli": {
+	        "packagesDirectory": "node_modules",
+	        "latestOnly": true
+	    }
+    }
+}

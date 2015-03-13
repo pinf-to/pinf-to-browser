@@ -10,7 +10,7 @@
   },
   "scripts": {
     "publish": "cd demo ; npm run-script build ; cd .. ; bin/pinf-publish",
-    "run": "cd demo ; npm run-script run"
+    "run": "bin/pinf-run"
   },
   "config": {
     "pio.deploy.converter": {

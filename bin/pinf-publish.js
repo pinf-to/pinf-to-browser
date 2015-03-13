@@ -1,4 +1,6 @@
 
+// TODO: Rename to `pinf-bundle`.
+
 require("to.pinf.lib/lib/publish").for(module, function (API, callback) {
 
 	return API.getPrograms(function (err, programs) {
@@ -7,7 +9,7 @@ require("to.pinf.lib/lib/publish").for(module, function (API, callback) {
 		var waitfor = API.WAITFOR.serial(callback);
 		
 		for (var programDescriptorPath in programs) {
-			waitfor(programDescriptorPath, function (programDescriptorPath, done) {
+			waitfor(programDescriptorPath, function (programDescriptorPath, callback) {
 
 				try {
 
@@ -21,19 +23,112 @@ require("to.pinf.lib/lib/publish").for(module, function (API, callback) {
 
 					var config = API.getConfigFrom(programDescriptor.combined, "github.com/pinf-to/pinf-to-browser/0");
 
-					API.ASSERT.equal(typeof config.templates, "object", "config['github.com/pinf-to/pinf-to-browser/0'].templates' must be set in '" + programDescriptorPath + "'");
-
-					var fromPath = API.PATH.dirname(programDescriptorPath);
+					var sourcePath = API.PATH.dirname(programDescriptorPath);
 					var pubPath = API.PATH.join(programDescriptorPath, "../.pub");
 
-					var templatesPath = API.PATH.join(__dirname, "../lib/templates");
-
-console.log("templatesPath", templatesPath);
-
-throw "STOP";
-
+					var templatePath = API.PATH.join(__dirname, "../template");
+					var templateDescriptorPath = API.PATH.join(templatePath, "package.json");
+					var templateDescriptor = API.FS.readJsonSync(templateDescriptorPath);
 
 					API.ASSERT.equal(typeof templateDescriptor.directories.deploy, "string", "'directories.deploy' must be set in '" + templateDescriptorPath + "'");
+
+					var relativeBaseUri = "";
+
+					function copy (fromPath, toPath, callback) {
+
+						console.log("Copying and transforming fileset", fromPath, "to", toPath, "...");
+
+						var domain = require('domain').create();
+						domain.on('error', function(err) {
+							// The error won't crash the process, but what it does is worse!
+							// Though we've prevented abrupt process restarting, we are leaking
+							// resources like crazy if this ever happens.
+							// This is no better than process.on('uncaughtException')!
+							console.error("UNHANDLED DOMAIN ERROR:", err.stack, new Error().stack);
+							process.exit(1);
+						});
+						domain.run(function() {
+
+							try {
+
+								var isDirectory = API.FS.statSync(fromPath).isDirectory();
+
+								var destinationStream = null;
+
+								if (isDirectory) {
+									destinationStream = API.GULP.dest(toPath);
+								} else {
+									destinationStream = API.GULP.dest(API.PATH.dirname(toPath));
+								}
+
+								destinationStream.once("error", function (err) {
+									return callback(err);
+								});
+
+								destinationStream.once("end", function () {
+
+									console.log("... done");
+
+									return callback();
+								});
+
+								var filter = API.GULP_FILTER([
+									'index.html',
+									'**/index.html'
+								]);
+
+								// TODO: Respect gitignore by making pinf walker into gulp plugin. Use pinf-package-insight to load ignore rules.
+								var stream = null;
+								if (isDirectory) {
+									stream = API.GULP.src([
+										"**",
+										"!.pub/",
+										"!.pub/**",
+										"!npm-debug.log",
+										"!node_modules/",
+										"!node_modules/**"
+									], {
+										cwd: fromPath
+									});
+								} else {
+									stream = API.GULP.src([
+										API.PATH.basename(fromPath)
+									], {
+										cwd: API.PATH.dirname(fromPath)
+									});											
+								}
+
+								stream
+									.pipe(API.GULP_PLUMBER())
+									.pipe(API.GULP_DEBUG({
+										title: '[pinf-to-docker]',
+										minimal: true
+									}))
+									.pipe(filter)
+									// TODO: Add generic variables here and move to `to.pinf.lib`.
+									.pipe(API.GULP_REPLACE(/%[^%]+%/g, function (matched) {
+										// TODO: Arrive at minimal set of core variables and options to add own.
+										if (matched === "%boot.loader.uri%") {
+											return (relativeBaseUri?relativeBaseUri+"/":"") + "bundles/loader.js";
+										} else
+										if (matched === "%boot.bundle.uri%") {
+											return (relativeBaseUri?relativeBaseUri+"/":"") + ("bundles/" + programDescriptor.combined.packages[programDescriptor.combined.boot.package].combined.exports.main).replace(/\/\.\//, "/");
+										}
+										return matched;
+									}))
+									.pipe(filter.restore())											
+									.pipe(destinationStream);
+
+								return stream.once("error", function (err) {
+									err.message += " (while running gulp)";
+									err.stack += "\n(while running gulp)";
+									return callback(err);
+								});
+							} catch (err) {
+								return callback(err);
+							}
+						});
+					}
 
 					function copyFiles (fromPath, toPath, callback) {
 
@@ -42,81 +137,7 @@ throw "STOP";
 						return API.FS.remove(toPath, function (err) {
 							if (err) return callback(err);
 
-							function copy (fromPath, toPath, callback) {
-
-								console.log("Copying and transforming fileset", fromPath, "to", toPath, "...");
-
-								var domain = require('domain').create();
-								domain.on('error', function(err) {
-									// The error won't crash the process, but what it does is worse!
-									// Though we've prevented abrupt process restarting, we are leaking
-									// resources like crazy if this ever happens.
-									// This is no better than process.on('uncaughtException')!
-									console.error("UNHANDLED DOMAIN ERROR:", err.stack, new Error().stack);
-									process.exit(1);
-								});
-								domain.run(function() {
-
-									try {
-
-										var destinationStream = API.GULP.dest(toPath);
-
-										destinationStream.once("error", function (err) {
-											return callback(err);
-										});
-
-										destinationStream.once("end", function () {
-
-											console.log("... done");
-
-											return callback();
-										});
-
-										var filter = API.GULP_FILTER(['index.php']);
-
-										// TODO: Respect gitignore by making pinf walker into gulp plugin. Use pinf-package-insight to load ignore rules.
-										var stream = API.GULP.src([
-											"**",
-											"!.pub/",
-											"!.pub/**",
-											"!npm-debug.log",
-											"!node_modules/",
-											"!node_modules/**"
-										], {
-											cwd: fromPath
-										})
-											.pipe(API.GULP_PLUMBER())
-											.pipe(API.GULP_DEBUG({
-												title: '[pinf-to-docker]',
-												minimal: true
-											}))
-											.pipe(filter)
-											// TODO: Add generic variables here and move to `to.pinf.lib`.
-											.pipe(API.GULP_REPLACE(/\{\{message\}\}/g, 'Hello World'))
-											.pipe(filter.restore())
-											.pipe(API.GULP_RENAME(function (path) {
-												const re = /(^|\/)(_NAME_)(\/|$)/;
-												if (path.basename === "_NAME_") {
-													path.basename = programName;
-												} else
-												if (re.test(path.dirname)) {
-													path.dirname = path.dirname.replace(re, "$1" + programName + "$3");
-												}
-											}))
-											.pipe(destinationStream);
-
-										return stream.once("error", function (err) {
-											err.message += " (while running gulp)";
-											err.stack += "\n(while running gulp)";
-											return callback(err);
-										});
-									} catch (err) {
-										return callback(err);
-									}
-								});
-							}
-
-							return copy(API.PATH.join(templatePath, "image"), toPath, function (err) {
+							return copy(API.PATH.join(templatePath), toPath, function (err) {
 								if (err) return callback(err);
 
 								return copy(fromPath, API.PATH.join(toPath, templateDescriptor.directories.deploy), callback);
@@ -124,39 +145,90 @@ throw "STOP";
 						});
 					}
 
-					function buildImage (callback) {
+					function copyCustomTemplates (callback) {
+						if (!config.templates) return callback(null);
+						var waitfor = API.WAITFOR.serial(callback);
+						for (var uri in config.templates) {
+							waitfor(uri, function (uri, callback) {
+								return copy(
+									API.PATH.join(fromPath, config.templates[uri]),
+									API.PATH.join(pubPath, uri),
+									callback
+								);
+							});
+						}
+						return waitfor();
+					}
 
-						console.log("Building image ...");
+					var packageDescriptor = programDescriptor.combined.packages[programDescriptor.combined.boot.package].combined;
 
-						return API.runCommands([
-							'docker build -t ' + config.docker.username + '/' + programName + ':' + config.docker.tag + ' .'
-						], {
-							cwd: pubPath
-						}, function (err, response) {
-							if (err) {
-								if (/\/var\/run\/docker\.sock: no such file or directory/.test(err.stderr)) {
-									if (
-										process.platform === "darwin" &&
-										!process.env.DOCKER_HOST
-									) {
-										console.error("\n\n  NOTE: Have you started boot2docker?:\n\n    boot2docker start\n\n");
-									}
-								}
-								return callback(err);
+					function writeProgramDescriptor (callback) {
+
+						var pubProgramDescriptorPath = API.PATH.join(pubPath, "program.json");
+
+						// TODO: Use PINF config tooling to transform program descriptor from one context to another.
+
+						var bundles = {};
+
+						if (
+							packageDescriptor.exports &&
+							packageDescriptor.exports.bundles
+						) {
+							for (var bundleUri in packageDescriptor.exports.bundles) {
+								bundles[bundleUri] = {
+									"source": {
+										"path": API.PATH.relative(API.PATH.dirname(pubProgramDescriptorPath), programDescriptorPath),
+										"overlay": {
+											"layout": {
+												"directories": {
+											        "bundles": API.PATH.relative(API.PATH.dirname(programDescriptorPath), API.PATH.join(pubPath, templateDescriptor.directories.deploy))
+											    }
+										    }
+										}
+									},
+									"path": "./" + API.PATH.join(templateDescriptor.directories.deploy, packageDescriptor.exports.bundles[bundleUri])
+								};
 							}
+						}
 
-							return callback(null);
-						});
+						var descriptor = {};
+
+						// TODO: Add more program properties needed to seed the runtime system.
+
+						if (Object.keys(bundles).length > 0) {
+							descriptor.exports = {
+								"bundles": bundles
+							};
+						}
+
+						console.log(("Writing program descriptor to: " + pubProgramDescriptorPath).yellow);
+						return API.FS.writeFile(pubProgramDescriptorPath, JSON.stringify(descriptor, null, 4), callback);
+					}
+
+					var fromPath = null;
+
+					if (
+						packageDescriptor.layout &&
+						packageDescriptor.layout.directories &&
+						packageDescriptor.layout.directories.bundles
+					) {
+						fromPath = API.PATH.join(sourcePath, packageDescriptor.layout.directories.bundles);
+					} else {
+						fromPath = API.PATH.join(sourcePath, "bundles");
 					}
 
 					return copyFiles(fromPath, pubPath, function (err) {
-						if (err) return done(err);
+						if (err) return callback(err)
 
-						return buildImage(done);
+						return copyCustomTemplates(function (err) {
+							if (err) return callback(err);
+
+							return writeProgramDescriptor(callback);
+						});
 					});
 					
 				} catch (err) {
-					return done(err);
+					return callback(err);
 				}
 			});
 		}

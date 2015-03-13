@@ -1,4 +1,5 @@
 {
+	"name": "pinf-to-browser-demo",
 	"boot": {
 		"package": "./package.json"
 	},
@@ -8,7 +9,7 @@
 		},
 		"github.com/pinf-to/pinf-to-browser/0": {
 			"templates": {
-				"index.html": "./publish/index.html"
+				"www/index.html": "./publish/index.html"
 			}
 		}
 	}
