@@ -7,10 +7,6 @@ Use this tool to publish [PINF JavaScript Bundles](https://github.com/pinf/pinf-
 
 Any portable bundle may be published.
 
-Examples:
-
-  * `./demo/` -> [pinf-to.github.io/pinf-to-browser](http://pinf-to.github.io/pinf-to-browser/)
-
 
 Development
 -----------
