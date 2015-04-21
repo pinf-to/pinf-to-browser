@@ -1,16 +1,11 @@
 {
+  "uid": "github.com/pinf-to/pinf-to-browser",
   "name": "pinf-to-browser",
   "version": "0.1.0",
-  "bin": {
-    "pinf-publish": "./bin/pinf-publish",
-    "pinf-run": "./bin/pinf-run"
-  },
+  "main": "plugin.js",
   "dependencies": {
-    "to.pinf.lib": "0.1.x"
-  },
-  "scripts": {
-    "publish": "cd demo ; npm run-script build ; cd .. ; bin/pinf-publish",
-    "run": "bin/pinf-run"
+    "to.pinf.lib": "0.1.x",
+    "bash.origin": "0.1.x"
   },
   "config": {
     "pio.deploy.converter": {
