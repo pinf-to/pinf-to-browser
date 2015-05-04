@@ -5,264 +5,273 @@ exports.for = function (API) {
 
 	exports.turn = function (resolvedConfig) {
 
-		var programDescriptorPath = API.getRootPath();
-		var programDescriptor = API.programDescriptor;
+		return API.ASYNC([
+			"GULP",
+			"GULP_DEBUG",
+			"GULP_PLUMBER",
+			"GULP_FILTER",
+			"GULP_REPLACE"
+		], function (GULP, GULP_DEBUG, GULP_PLUMBER, GULP_FILTER, GULP_REPLACE) {
 
-		var sourcePath = API.PATH.dirname(programDescriptorPath);
+			var programDescriptorPath = API.getRootPath();
+			var programDescriptor = API.programDescriptor;
 
-		var pubPath = API.getTargetPath();
+			var sourcePath = API.PATH.dirname(programDescriptorPath);
 
-		var templatePath = API.PATH.join(__dirname, "template");
-		var templateDescriptorPath = API.PATH.join(templatePath, "package.json");
-		var templateDescriptor = API.FS.readJsonSync(templateDescriptorPath);
+			var pubPath = API.getTargetPath();
 
-		API.ASSERT.equal(typeof templateDescriptor.directories.deploy, "string", "'directories.deploy' must be set in '" + templateDescriptorPath + "'");
+			var templatePath = API.PATH.join(__dirname, "template");
+			var templateDescriptorPath = API.PATH.join(templatePath, "package.json");
+			var templateDescriptor = API.FS.readJsonSync(templateDescriptorPath);
 
-		var relativeBaseUri = "";
+			API.ASSERT.equal(typeof templateDescriptor.directories.deploy, "string", "'directories.deploy' must be set in '" + templateDescriptorPath + "'");
 
-		return programDescriptor.getBootPackageDescriptor().then(function (packageDescriptor) {
+			var relativeBaseUri = "";
 
-			packageDescriptor = packageDescriptor._data;
+			return programDescriptor.getBootPackageDescriptor().then(function (packageDescriptor) {
 
-			return API.Q.denodeify(function (callback) {
+				packageDescriptor = packageDescriptor._data;
 
-				function copy (fromPath, toPath, callback) {
+				return API.Q.denodeify(function (callback) {
 
-					API.console.debug("Copying and transforming fileset", fromPath, "to", toPath, "...");
+					function copy (fromPath, toPath, callback) {
 
-					var domain = require('domain').create();
-					domain.on('error', function(err) {
-						// The error won't crash the process, but what it does is worse!
-						// Though we've prevented abrupt process restarting, we are leaking
-						// resources like crazy if this ever happens.
-						// This is no better than process.on('uncaughtException')!
-						console.error("UNHANDLED DOMAIN ERROR:", err.stack, new Error().stack);
-						process.exit(1);
-					});
-					domain.run(function() {
+						API.console.debug("Copying and transforming fileset", fromPath, "to", toPath, "...");
 
-						try {
+						var domain = require('domain').create();
+						domain.on('error', function(err) {
+							// The error won't crash the process, but what it does is worse!
+							// Though we've prevented abrupt process restarting, we are leaking
+							// resources like crazy if this ever happens.
+							// This is no better than process.on('uncaughtException')!
+							console.error("UNHANDLED DOMAIN ERROR:", err.stack, new Error().stack);
+							process.exit(1);
+						});
+						domain.run(function() {
 
-							var isDirectory = API.FS.statSync(fromPath).isDirectory();
+							try {
 
-							var destinationStream = null;
+								var isDirectory = API.FS.statSync(fromPath).isDirectory();
 
-							if (isDirectory) {
-								destinationStream = API.GULP.dest(toPath);
-							} else {
-								destinationStream = API.GULP.dest(API.PATH.dirname(toPath));
-							}
+								var destinationStream = null;
 
-							destinationStream.once("error", function (err) {
-								return callback(err);
-							});
+								if (isDirectory) {
+									destinationStream = GULP.dest(toPath);
+								} else {
+									destinationStream = GULP.dest(API.PATH.dirname(toPath));
+								}
 
-							destinationStream.once("end", function () {
-
-								API.console.debug("... done");
-
-								return callback();
-							});
-
-							var filter = API.GULP_FILTER([
-								'index.html',
-								'**/index.html'
-							]);
-
-							// TODO: Respect gitignore by making pinf walker into gulp plugin. Use pinf-package-insight to load ignore rules.
-							var stream = null;
-							if (isDirectory) {
-								stream = API.GULP.src([
-									"**",
-									"!.pub/",
-									"!.pub/**",
-									"!npm-debug.log",
-									"!node_modules/",
-									"!node_modules/**"
-								], {
-									cwd: fromPath
+								destinationStream.once("error", function (err) {
+									return callback(err);
 								});
-							} else {
-								stream = API.GULP.src([
-									API.PATH.basename(fromPath)
-								], {
-									cwd: API.PATH.dirname(fromPath)
-								});											
-							}
 
-							stream
-								.pipe(API.GULP_PLUMBER())
+								destinationStream.once("end", function () {
 
-							if (API.VERBOSE) {
+									API.console.debug("... done");
+
+									return callback();
+								});
+
+								var filter = GULP_FILTER([
+									'index.html',
+									'**/index.html'
+								]);
+
+								// TODO: Respect gitignore by making pinf walker into gulp plugin. Use pinf-package-insight to load ignore rules.
+								var stream = null;
+								if (isDirectory) {
+									stream = GULP.src([
+										"**",
+										"!.pub/",
+										"!.pub/**",
+										"!npm-debug.log",
+										"!node_modules/",
+										"!node_modules/**"
+									], {
+										cwd: fromPath
+									});
+								} else {
+									stream = GULP.src([
+										API.PATH.basename(fromPath)
+									], {
+										cwd: API.PATH.dirname(fromPath)
+									});											
+								}
+
+								stream
+									.pipe(GULP_PLUMBER())
+
+								if (API.VERBOSE) {
+									stream = stream
+										.pipe(GULP_DEBUG({
+											title: '[pinf-to-browser]',
+											minimal: true
+										}))
+								}
+
 								stream = stream
-									.pipe(API.GULP_DEBUG({
-										title: '[pinf-to-browser]',
-										minimal: true
+									.pipe(filter)
+									// TODO: Add generic variables here and move to `to.pinf.lib`.
+									.pipe(GULP_REPLACE(/%[^%]+%/g, function (matched) {
+										// TODO: Arrive at minimal set of core variables and options to add own.
+										if (matched === "%boot.loader.uri%") {
+											return (relativeBaseUri?relativeBaseUri+"/":"") + "bundles/loader.js";
+										} else
+										if (matched === "%boot.bundle.uri%") {
+											return (relativeBaseUri?relativeBaseUri+"/":"") + ("bundles/" + packageDescriptor.main).replace(/\/\.\//, "/");
+										}
+										return matched;
 									}))
-							}
+									.pipe(filter.restore())											
+									.pipe(destinationStream);
 
-							stream = stream
-								.pipe(filter)
-								// TODO: Add generic variables here and move to `to.pinf.lib`.
-								.pipe(API.GULP_REPLACE(/%[^%]+%/g, function (matched) {
-									// TODO: Arrive at minimal set of core variables and options to add own.
-									if (matched === "%boot.loader.uri%") {
-										return (relativeBaseUri?relativeBaseUri+"/":"") + "bundles/loader.js";
-									} else
-									if (matched === "%boot.bundle.uri%") {
-										return (relativeBaseUri?relativeBaseUri+"/":"") + ("bundles/" + packageDescriptor.main).replace(/\/\.\//, "/");
-									}
-									return matched;
-								}))
-								.pipe(filter.restore())											
-								.pipe(destinationStream);
-
-							return stream.once("error", function (err) {
-								err.message += " (while running gulp)";
-								err.stack += "\n(while running gulp)";
+								return stream.once("error", function (err) {
+									err.message += " (while running gulp)";
+									err.stack += "\n(while running gulp)";
+									return callback(err);
+								});
+							} catch (err) {
 								return callback(err);
-							});
-						} catch (err) {
-							return callback(err);
-						}
-					});
-				}
+							}
+						});
+					}
 
-				function copyFiles (fromPath, toPath, callback) {
+					function copyFiles (fromPath, toPath, callback) {
 
-					API.console.debug("Copying and transforming program from", fromPath, "to", toPath);
+						API.console.debug("Copying and transforming program from", fromPath, "to", toPath);
 
-					return API.FS.remove(toPath, function (err) {
-						if (err) return callback(err);
-
-						return copy(API.PATH.join(templatePath), toPath, function (err) {
+						return API.FS.remove(toPath, function (err) {
 							if (err) return callback(err);
 
-							return copy(fromPath, API.PATH.join(toPath, templateDescriptor.directories.deploy), callback);
-						});
-					});
-				}
+							return copy(API.PATH.join(templatePath), toPath, function (err) {
+								if (err) return callback(err);
 
-				function copyCustomTemplates (callback) {
-					if (!resolvedConfig.templates) return callback(null);
-					var waitfor = API.WAITFOR.serial(callback);
-					for (var uri in resolvedConfig.templates) {
-						waitfor(uri, function (uri, callback) {
-							return copy(
-								API.PATH.join(fromPath, config.templates[uri]),
-								API.PATH.join(pubPath, uri),
-								callback
-							);
+								return copy(fromPath, API.PATH.join(toPath, templateDescriptor.directories.deploy), callback);
+							});
 						});
 					}
-					return waitfor();
-				}
 
-				function writeProgramDescriptor (callback) {
+					function copyCustomTemplates (callback) {
+						if (!resolvedConfig.templates) return callback(null);
+						var waitfor = API.WAITFOR.serial(callback);
+						for (var uri in resolvedConfig.templates) {
+							waitfor(uri, function (uri, callback) {
+								return copy(
+									API.PATH.join(fromPath, config.templates[uri]),
+									API.PATH.join(pubPath, uri),
+									callback
+								);
+							});
+						}
+						return waitfor();
+					}
 
-					var pubProgramDescriptorPath = API.PATH.join(pubPath, "program.json");
+					function writeProgramDescriptor (callback) {
 
-					// TODO: Use PINF config tooling to transform program descriptor from one context to another.
+						var pubProgramDescriptorPath = API.PATH.join(pubPath, "program.json");
 
-					var bundles = {};
+						// TODO: Use PINF config tooling to transform program descriptor from one context to another.
 
-					if (
-						packageDescriptor.exports &&
-						packageDescriptor.exports.bundles
-					) {
-						for (var bundleUri in packageDescriptor.exports.bundles) {
-							bundles[bundleUri] = {
-								"source": {
-									"path": API.PATH.relative(API.PATH.dirname(pubProgramDescriptorPath), programDescriptorPath),
-									"overlay": {
-										"layout": {
-											"directories": {
-										        "bundles": API.PATH.relative(API.PATH.dirname(programDescriptorPath), API.PATH.join(pubPath, templateDescriptor.directories.deploy))
+						var bundles = {};
+
+						if (
+							packageDescriptor.exports &&
+							packageDescriptor.exports.bundles
+						) {
+							for (var bundleUri in packageDescriptor.exports.bundles) {
+								bundles[bundleUri] = {
+									"source": {
+										"path": API.PATH.relative(API.PATH.dirname(pubProgramDescriptorPath), programDescriptorPath),
+										"overlay": {
+											"layout": {
+												"directories": {
+											        "bundles": API.PATH.relative(API.PATH.dirname(programDescriptorPath), API.PATH.join(pubPath, templateDescriptor.directories.deploy))
+											    }
 										    }
-									    }
-									}
-								},
-								"path": "./" + API.PATH.join(templateDescriptor.directories.deploy, packageDescriptor.exports.bundles[bundleUri])
+										}
+									},
+									"path": "./" + API.PATH.join(templateDescriptor.directories.deploy, packageDescriptor.exports.bundles[bundleUri])
+								};
+							}
+						}
+
+						var descriptor = {
+							boot: {
+								runtime: API.PATH.relative(API.PATH.dirname(pubProgramDescriptorPath), API.getRuntimeDescriptorPath())
+							}
+						};
+
+						// TODO: Add more program properties needed to seed the runtime system.
+
+						if (Object.keys(bundles).length > 0) {
+							descriptor.exports = {
+								"bundles": bundles
 							};
 						}
+
+						descriptor.config = resolvedConfig.config || {};
+
+						API.console.debug(("Writing program descriptor to: " + pubProgramDescriptorPath).yellow);
+						return API.FS.writeFile(pubProgramDescriptorPath, JSON.stringify(descriptor, null, 4), callback);
 					}
 
-					var descriptor = {
-						boot: {
-							runtime: API.PATH.relative(API.PATH.dirname(pubProgramDescriptorPath), API.getRuntimeDescriptorPath())
-						}
-					};
 
-					// TODO: Add more program properties needed to seed the runtime system.
+					if (resolvedConfig.wwwBasePath) {
+						return API.FS.remove(pubPath, function (err) {
+							if (err) return callback(err);
 
-					if (Object.keys(bundles).length > 0) {
-						descriptor.exports = {
-							"bundles": bundles
-						};
+							return copy(API.PATH.join(templatePath), pubPath, function (err) {
+								if (err) return callback(err);
+
+								return writeProgramDescriptor(function (err) {
+									if (err) return callback(err);
+
+									var targetPath = API.PATH.join(pubPath, "www");
+
+									if (resolvedConfig.symlinkBasePath) {
+										API.FS.removeSync(targetPath);
+										return API.FS.symlink(resolvedConfig.wwwBasePath, targetPath, callback);
+									} else {
+										return copy (resolvedConfig.wwwBasePath, targetPath, callback);
+									}
+								});
+							});
+						});
 					}
 
-					descriptor.config = resolvedConfig.config || {};
+					var fromPath = null;
+					if (resolvedConfig.bundlesBasePath) {
+						fromPath = resolvedConfig.bundlesBasePath;
+					} else
+					if (
+						packageDescriptor.layout &&
+						packageDescriptor.layout.directories &&
+						packageDescriptor.layout.directories.bundles
+					) {
+						fromPath = API.PATH.join(sourcePath, packageDescriptor.layout.directories.bundles);
+					} else {
+						fromPath = API.PATH.join(sourcePath, "bundles");
+					}
 
-					API.console.debug(("Writing program descriptor to: " + pubProgramDescriptorPath).yellow);
-					return API.FS.writeFile(pubProgramDescriptorPath, JSON.stringify(descriptor, null, 4), callback);
-				}
+					return copyFiles(fromPath, pubPath, function (err) {
+						if (err) return callback(err)
 
-
-				if (resolvedConfig.wwwBasePath) {
-					return API.FS.remove(pubPath, function (err) {
-						if (err) return callback(err);
-
-						return copy(API.PATH.join(templatePath), pubPath, function (err) {
+						return copyCustomTemplates(function (err) {
 							if (err) return callback(err);
 
 							return writeProgramDescriptor(function (err) {
 								if (err) return callback(err);
 
-								var targetPath = API.PATH.join(pubPath, "www");
+								var targetPath = API.PATH.join(pubPath, templateDescriptor.directories.deploy);
 
-								if (resolvedConfig.symlinkBasePath) {
-									API.FS.removeSync(targetPath);
-									return API.FS.symlink(resolvedConfig.wwwBasePath, targetPath, callback);
-								} else {
-									return copy (resolvedConfig.wwwBasePath, targetPath, callback);
-								}
+								API.FS.removeSync(targetPath);
+
+								return API.FS.symlink(fromPath, targetPath, callback);
 							});
 						});
 					});
-				}
-
-				var fromPath = null;
-				if (resolvedConfig.bundlesBasePath) {
-					fromPath = resolvedConfig.bundlesBasePath;
-				} else
-				if (
-					packageDescriptor.layout &&
-					packageDescriptor.layout.directories &&
-					packageDescriptor.layout.directories.bundles
-				) {
-					fromPath = API.PATH.join(sourcePath, packageDescriptor.layout.directories.bundles);
-				} else {
-					fromPath = API.PATH.join(sourcePath, "bundles");
-				}
-
-				return copyFiles(fromPath, pubPath, function (err) {
-					if (err) return callback(err)
-
-					return copyCustomTemplates(function (err) {
-						if (err) return callback(err);
-
-						return writeProgramDescriptor(function (err) {
-							if (err) return callback(err);
-
-							var targetPath = API.PATH.join(pubPath, templateDescriptor.directories.deploy);
-
-							API.FS.removeSync(targetPath);
-
-							return API.FS.symlink(fromPath, targetPath, callback);
-						});
-					});
-				});
-			})();
+				})();
+			});
 		});
 	}
 
