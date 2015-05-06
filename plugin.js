@@ -3,6 +3,16 @@ exports.for = function (API) {
 
 	var exports = {};
 
+	exports.resolve = function (resolver, config, previousResolvedConfig) {
+
+		return resolver({}).then(function (resolvedConfig) {
+
+			resolvedConfig.targetPath = API.getTargetPath();
+
+			return resolvedConfig;
+		});
+	}
+
 	exports.turn = function (resolvedConfig) {
 
 		return API.ASYNC([

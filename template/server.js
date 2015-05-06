@@ -10,12 +10,20 @@ const MORGAN = require("morgan");
 
 //const DEV = process.env.DEV || false;
 
+const DEBUG = true;
+
+
+if (DEBUG) console.log("[server] Init 1");
 
 return require("org.pinf.genesis.lib/lib/main").main(function(options, callback) {
+
+if (DEBUG) console.log("[server] Init 2");
 
 	var app = EXPRESS();
 
 	app.use(MORGAN('combined'));
+
+if (DEBUG) console.log("[server] Init 3");
 
 	// TODO: Load descriptor via PINF abstraction.
 	var programDescriptor = require("./program.json");
@@ -87,9 +95,20 @@ return require("org.pinf.genesis.lib/lib/main").main(function(options, callback)
 			break;			
 		}
 	}
+
+	var configStr = JSON.stringify(config);
+	// TODO: Externalize this.
+	configStr = configStr.replace(/\{\{env.OPENSHIFT_NODEJS_IP\}\}/g, process.env.OPENSHIFT_NODEJS_IP || "");
+	configStr = configStr.replace(/\{\{env.OPENSHIFT_NODEJS_PORT\}\}/g, process.env.OPENSHIFT_NODEJS_PORT || "");
+	config = JSON.parse(configStr);
+
+if (DEBUG) console.log("[server] Init 4", config);
+
 	if (!config) {
 		return callback(new Error("No config found for '" + configId + "' in runtime descriptor '" + require.resolve(programDescriptor.boot.runtime) + "'"));
 	}
+
+if (DEBUG) console.log("[server] Init 5");
 
 	// Use default loader if bundles don't ship their own loader.
 	if (!FS.existsSync(PATH.join(__dirname, "www/bundles/loader.js"))) {
@@ -108,10 +127,12 @@ return require("org.pinf.genesis.lib/lib/main").main(function(options, callback)
 		}).on("error", next).pipe(res);
 	});
 
+if (DEBUG) console.log("[server] Init 6");
 
 	var server = HTTP.createServer(app);
 	server.listen(config.port, config.bind);
 
+if (DEBUG) console.log("[server] Init 7");
 
 	var connections = [];
 	var wss = new WS.Server({
@@ -132,6 +153,8 @@ return require("org.pinf.genesis.lib/lib/main").main(function(options, callback)
 		});
 	});
 
+if (DEBUG) console.log("[server] Init 8");
+
 	function tiggerSourceHashChanged () {
 		console.log("Source hash changed!");
 		var cons = connections;
@@ -141,6 +164,7 @@ return require("org.pinf.genesis.lib/lib/main").main(function(options, callback)
 		});
 	}
 
+if (DEBUG) console.log("[server] Init 9");
 
 	function monitorSourceHashFile () {
 		if (
@@ -177,4 +201,8 @@ return require("org.pinf.genesis.lib/lib/main").main(function(options, callback)
 		console.log("Open browser to: http://" + config.bind + ":" + config.port + "/");
 	}, 2 * 1000);
 
+
+if (DEBUG) console.log("[server] Init 10");
+
 }, module);
+
